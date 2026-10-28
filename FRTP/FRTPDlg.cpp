@@ -150,6 +150,20 @@ BOOL CFRTPDlg::OnInitDialog()
     }
     CDialog::OnInitDialog();
     SetWindowText(kWindowTitle);
+    CClientDC dc(this);
+    m_dpi = dc.GetDeviceCaps(LOGPIXELSX);
+    if (m_dpi <= 0)
+    {
+        Msg(L"Unable to determine the display DPI. The layout will use 96 DPI.", L"FRTP", MB_ICONWARNING);
+        m_dpi = 96;
+    }
+    CRect dialogUnits(0, 0, 1000, 0);
+    if (!::MapDialogRect(m_hWnd, &dialogUnits) || dialogUnits.Width() <= 0)
+    {
+        Msg(L"Unable to determine the dialog coordinate scale.", L"Keyboard layout", MB_ICONERROR);
+        return TRUE;
+    }
+    m_dialogBaseUnitX1000 = dialogUnits.Width();
     ScaleLayout();
     ResizeBrowserViewport();
     LayoutHeaderControls();
@@ -172,7 +186,7 @@ BOOL CFRTPDlg::OnInitDialog()
     m_btTopMost.SetWindowText(L"\U0001F4CC");
     m_btKeyShow.SetWindowText(L"\u2328");
 
-    if (!m_functionKeyFont.CreatePointFont(90, L"MS Shell Dlg"))
+    if (!m_functionKeyFont.CreatePointFont(MulDiv(90, 96, m_dpi), L"MS Shell Dlg"))
     {
         Msg(L"Unable to create the function key font.", L"Keyboard layout", MB_ICONWARNING);
     }
@@ -259,17 +273,14 @@ BOOL CFRTPDlg::OnInitDialog()
     for (auto& t : tips) m_tip.AddTool(GetDlgItem(t.id), t.text);
     m_tip.Activate(TRUE);
 
-    CRect echoArea;
-    GetDlgItem(IDC_PN_CGTP)->GetWindowRect(&echoArea);
-    ScreenToClient(&echoArea);
-    echoArea.DeflateRect(kBrowserFrameInset, kBrowserFrameInset);
-    int echoWidth = min(kBrowserViewportWidth, echoArea.Width());
-    int echoHeight = min(kBrowserViewportHeight, echoArea.Height());
-    m_echoBounds.SetRect(
-        echoArea.left + (echoArea.Width() - echoWidth) / 2,
-        echoArea.top + (echoArea.Height() - echoHeight) / 2,
-        echoArea.left + (echoArea.Width() - echoWidth) / 2 + echoWidth,
-        echoArea.top + (echoArea.Height() - echoHeight) / 2 + echoHeight);
+    CWnd* echoHost = GetDlgItem(IDC_WEBVIEW_CGTP);
+    if (!echoHost)
+    {
+        Msg(L"Unable to find the browser display area.", L"Browser layout", MB_ICONERROR);
+        return TRUE;
+    }
+    echoHost->GetWindowRect(&m_echoBounds);
+    ScreenToClient(&m_echoBounds);
 
     CWnd* placeholder = GetDlgItem(IDC_EXPLORER_CGTP);
     placeholder->DestroyWindow();
@@ -326,23 +337,25 @@ void CFRTPDlg::ScaleLayout()
 {
     CRect client;
     GetClientRect(&client);
-    if (!m_scaledFont.CreatePointFont(72, L"MS Shell Dlg"))
+    if (!m_scaledFont.CreatePointFont(MulDiv(72, 96, m_dpi), L"MS Shell Dlg"))
     {
         Msg(L"Unable to create the scaled interface font.", L"FRTP", MB_ICONWARNING);
         return;
     }
     SetFont(&m_scaledFont, FALSE);
 
+    const int scaleNumerator = 384;
+    const int scaleDenominator = 5 * m_dpi;
     for (CWnd* child = GetWindow(GW_CHILD); child;)
     {
         CWnd* next = child->GetNextWindow();
         CRect bounds;
         child->GetWindowRect(&bounds);
         ScreenToClient(&bounds);
-        bounds.left = MulDiv(bounds.left, 4, 5);
-        bounds.top = MulDiv(bounds.top, 4, 5);
-        bounds.right = MulDiv(bounds.right, 4, 5);
-        bounds.bottom = MulDiv(bounds.bottom, 4, 5);
+        bounds.left = MulDiv(bounds.left, scaleNumerator, scaleDenominator);
+        bounds.top = MulDiv(bounds.top, scaleNumerator, scaleDenominator);
+        bounds.right = MulDiv(bounds.right, scaleNumerator, scaleDenominator);
+        bounds.bottom = MulDiv(bounds.bottom, scaleNumerator, scaleDenominator);
         child->MoveWindow(&bounds, FALSE);
         child->SetFont(&m_scaledFont, FALSE);
         child = next;
@@ -353,10 +366,9 @@ void CFRTPDlg::ScaleLayout()
     int frameWidth = window.Width() - client.Width();
     int frameHeight = window.Height() - client.Height();
     SetWindowPos(nullptr, 0, 0,
-                 MulDiv(client.Width(), 4, 5) + frameWidth,
-                 MulDiv(client.Height(), 4, 5) + frameHeight,
+                 MulDiv(client.Width(), scaleNumerator, scaleDenominator) + frameWidth,
+                 MulDiv(client.Height(), scaleNumerator, scaleDenominator) + frameHeight,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    CenterWindow();
 }
 
 void CFRTPDlg::ResizeBrowserViewport()
@@ -369,15 +381,33 @@ void CFRTPDlg::ResizeBrowserViewport()
         return;
     }
 
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    HMONITOR monitor = ::MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor || !::GetMonitorInfoW(monitor, &monitorInfo))
+    {
+        Msg(L"Unable to determine the monitor work area.", L"Browser layout", MB_ICONERROR);
+        return;
+    }
+    const CRect workArea(monitorInfo.rcWork);
+
     CRect client;
     CRect panelBounds;
+    CRect window;
     GetClientRect(&client);
+    GetWindowRect(&window);
     panel->GetWindowRect(&panelBounds);
     ScreenToClient(&panelBounds);
 
+    const int frameInset = kBrowserFrameInset;
+    const int rightPadding = 8;
+    const int frameWidth = window.Width() - client.Width();
+    const int frameHeight = window.Height() - client.Height();
+    const int viewportWidth = kBrowserViewportWidth;
+    const int viewportHeight = kBrowserViewportHeight;
     const int oldPanelBottom = panelBounds.bottom;
-    const int panelWidth = kBrowserViewportWidth + 2 * kBrowserFrameInset;
-    const int panelHeight = kBrowserViewportHeight + 2 * kBrowserFrameInset;
+    const int panelWidth = viewportWidth + 2 * frameInset;
+    const int panelHeight = viewportHeight + 2 * frameInset;
     const int heightChange = panelHeight - panelBounds.Height();
     panelBounds.right = panelBounds.left + panelWidth;
     panelBounds.bottom = panelBounds.top + panelHeight;
@@ -410,10 +440,10 @@ void CFRTPDlg::ResizeBrowserViewport()
     }
 
     CRect webViewBounds(
-        panelBounds.left + kBrowserFrameInset,
-        panelBounds.top + kBrowserFrameInset,
-        panelBounds.left + kBrowserFrameInset + kBrowserViewportWidth,
-        panelBounds.top + kBrowserFrameInset + kBrowserViewportHeight);
+        panelBounds.left + frameInset,
+        panelBounds.top + frameInset,
+        panelBounds.left + frameInset + viewportWidth,
+        panelBounds.top + frameInset + viewportHeight);
     if (!::MoveWindow(webViewHost->GetSafeHwnd(), webViewBounds.left, webViewBounds.top,
                       webViewBounds.Width(), webViewBounds.Height(), FALSE))
     {
@@ -421,20 +451,48 @@ void CFRTPDlg::ResizeBrowserViewport()
         return;
     }
 
-    CRect window;
-    GetWindowRect(&window);
+    const UINT sideButtonIds[] = { IDC_BT_HELP, IDC_BT_TBKEYSHOW, IDC_BT_TOPMOST };
+    int sideButtonWidth = 0;
+    for (UINT id : sideButtonIds)
+    {
+        CWnd* button = GetDlgItem(id);
+        if (!button)
+        {
+            Msg(L"Unable to find a side toolbar button.", L"Toolbar layout", MB_ICONERROR);
+            return;
+        }
+        CRect bounds;
+        button->GetWindowRect(&bounds);
+        sideButtonWidth = max(sideButtonWidth, bounds.Width());
+    }
+
     GetClientRect(&client);
-    const int frameWidth = window.Width() - client.Width();
-    const int frameHeight = window.Height() - client.Height();
-    const int clientWidth = max(client.Width(), panelBounds.right + 8);
-    const int clientHeight = client.Height() + heightChange;
-    if (!SetWindowPos(nullptr, 0, 0, clientWidth + frameWidth, clientHeight + frameHeight,
-                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE))
+    int rightmostChild = panelBounds.right;
+    int lowestChild = panelBounds.bottom;
+    for (CWnd* child = GetWindow(GW_CHILD); child; child = child->GetNextWindow())
+    {
+        CRect bounds;
+        child->GetWindowRect(&bounds);
+        ScreenToClient(&bounds);
+        rightmostChild = max(rightmostChild, bounds.right);
+        lowestChild = max(lowestChild, bounds.bottom);
+    }
+
+    const int clientWidth = max(
+        client.Width(),
+        max(rightmostChild + rightPadding,
+            panelBounds.right + rightPadding + sideButtonWidth + 6));
+    const int clientHeight = max(client.Height() + heightChange, lowestChild + 8);
+    const int windowWidth = clientWidth + frameWidth;
+    const int windowHeight = clientHeight + frameHeight;
+    const int windowLeft = workArea.left + max(0, (workArea.Width() - windowWidth) / 2);
+    const int windowTop = workArea.top + max(0, (workArea.Height() - windowHeight) / 2);
+    if (!SetWindowPos(nullptr, windowLeft, windowTop, windowWidth, windowHeight,
+                      SWP_NOZORDER | SWP_NOACTIVATE))
     {
         Msg(L"Unable to resize the application window for the browser display area.", L"Browser layout", MB_ICONERROR);
         return;
     }
-    CenterWindow();
 }
 
 void CFRTPDlg::LayoutHeaderControls()
@@ -611,29 +669,27 @@ void CFRTPDlg::SetKeyboardVisible(bool visible)
 
 void CFRTPDlg::LayoutFunctionKeys(int controllerType)
 {
-    const UINT buttonIds[] = { IDC_BT_F1, IDC_BT_F2, IDC_BT_F3, IDC_BT_F4, IDC_BT_F5 };
-    const int compactPositions[] = { 82, 172, 262, 352, 442 };
-    const int standardPositions[] = { 111, 186, 261, 336, 411 };
+    const UINT buttonIds[] = {
+        IDC_BT_PREV, IDC_BT_F1, IDC_BT_F2, IDC_BT_F3,
+        IDC_BT_F4, IDC_BT_F5, IDC_BT_NEXT
+    };
+    const int compactPositions[] = { 22, 82, 172, 262, 352, 442, 496 };
+    const int standardPositions[] = { 22, 111, 186, 261, 336, 411, 496 };
     const int* positions = controllerType == 1 || controllerType == 2
         ? compactPositions
         : standardPositions;
 
-    for (size_t i = 0; i < 5; ++i)
+    for (size_t i = 0; i < _countof(buttonIds); ++i)
     {
         CWnd* button = GetDlgItem(buttonIds[i]);
         if (!button)
         {
-            Msg(L"Unable to find a function key button.", L"Keyboard layout", MB_ICONERROR);
+            Msg(L"Unable to find a function-row button.", L"Keyboard layout", MB_ICONERROR);
             return;
         }
 
-        CRect position(positions[i], 0, positions[i], 0);
-        if (!::MapDialogRect(m_hWnd, &position))
-        {
-            Msg(L"Unable to convert the function key layout.", L"Keyboard layout", MB_ICONERROR);
-            return;
-        }
-        const int left = MulDiv(position.left, 4, 5);
+        const int dialogPixelLeft = MulDiv(positions[i], m_dialogBaseUnitX1000, 1000);
+        const int left = MulDiv(dialogPixelLeft, 384, 5 * m_dpi);
         CRect bounds;
         button->GetWindowRect(&bounds);
         ScreenToClient(&bounds);

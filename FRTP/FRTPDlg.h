@@ -61,6 +61,8 @@ private:
     std::vector<HWND> m_kbControls;
     CRect m_kbArea;
     CRect m_echoBounds;
+    int m_dpi = 96;
+    int m_dialogBaseUnitX1000 = 0;
     int m_fullClientH = 0;
     int m_collapsedClientH = 0;
 

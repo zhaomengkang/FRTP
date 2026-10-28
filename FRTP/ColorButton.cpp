@@ -26,9 +26,8 @@ void CColorButton::SetBackColor(COLORREF back)
 void CColorButton::SetGlyphFont(const wchar_t* face, int pointSize)
 {
     m_font.DeleteObject();
-    CClientDC dc(this);
     LOGFONTW lf = {};
-    lf.lfHeight = -MulDiv(pointSize, dc.GetDeviceCaps(LOGPIXELSY), 72);
+    lf.lfHeight = -MulDiv(pointSize, 96, 72);
     lf.lfWeight = FW_NORMAL;
     wcscpy_s(lf.lfFaceName, face);
     m_hasFont = m_font.CreateFontIndirectW(&lf) != FALSE;
@@ -47,9 +46,12 @@ void CColorButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 
     CString text;
     GetWindowText(text);
+    CFont* font = m_hasFont ? &m_font : GetFont();
+    if (!font || !font->GetSafeHandle())
+        font = GetParent()->GetFont();
     CFont* old = nullptr;
-    if (m_hasFont) old = pDC->SelectObject(&m_font);
-    else old = pDC->SelectObject(GetParent()->GetFont());
+    if (font && font->GetSafeHandle())
+        old = pDC->SelectObject(font);
 
     pDC->SetBkMode(TRANSPARENT);
     pDC->SetTextColor(disabled ? GetSysColor(COLOR_GRAYTEXT) : m_text);
@@ -64,5 +66,6 @@ void CColorButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
         fr.DeflateRect(3, 3);
         pDC->DrawFocusRect(fr);
     }
-    pDC->SelectObject(old);
+    if (old)
+        pDC->SelectObject(old);
 }
