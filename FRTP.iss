@@ -4,7 +4,7 @@
 #define MyAppExeName "FRTP.exe"
 
 [Setup]
-AppId={{267B176E-6D8C-431C-B4FF-D1D9BDF12ADD}}
+AppId= 0378B35D-7125-451C-8675-51FCB231100A
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}

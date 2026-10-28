@@ -59,7 +59,32 @@ namespace
         return true;
     }
 
-    void ShowCommandLineHelp(bool invalid)
+    bool WriteConsoleText(HANDLE output, const std::wstring& text)
+    {
+        DWORD consoleMode = 0;
+        if (GetConsoleMode(output, &consoleMode))
+        {
+            DWORD written = 0;
+            return WriteConsoleW(output, text.c_str(), static_cast<DWORD>(text.size()), &written, nullptr)
+                && written == text.size();
+        }
+
+        int byteCount = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
+                                            static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        if (byteCount <= 0)
+            return false;
+
+        std::string utf8(byteCount, '\0');
+        if (WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+                                &utf8[0], byteCount, nullptr, nullptr) != byteCount)
+            return false;
+
+        DWORD written = 0;
+        return WriteFile(output, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr)
+            && written == utf8.size();
+    }
+
+    void WriteCommandLineHelp(bool invalid)
     {
         std::wstring message;
         if (invalid)
@@ -78,7 +103,48 @@ namespace
             L"Use -h or --help to display this help.\r\n\r\n"
             L"Security: command-line passwords may be visible in process listings and shell history.";
 
-        MessageBoxW(nullptr, message.c_str(), L"FRTP Command-Line Help", MB_OK | (invalid ? MB_ICONWARNING : MB_ICONINFORMATION));
+        bool allocatedConsole = false;
+        if (!AttachConsole(ATTACH_PARENT_PROCESS) && GetLastError() != ERROR_ACCESS_DENIED)
+        {
+            if (!AllocConsole())
+            {
+                MessageBoxW(nullptr, L"Unable to open a console for command-line help.",
+                            L"FRTP", MB_OK | MB_ICONERROR);
+                return;
+            }
+            allocatedConsole = true;
+        }
+
+        HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        bool closeOutput = false;
+        if (!output || output == INVALID_HANDLE_VALUE)
+        {
+            output = CreateFileW(L"CONOUT$", GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
+                                 OPEN_EXISTING, 0, nullptr);
+            closeOutput = output != INVALID_HANDLE_VALUE;
+        }
+
+        bool written = output && output != INVALID_HANDLE_VALUE && WriteConsoleText(output, message);
+        if (written && allocatedConsole)
+        {
+            const std::wstring prompt = L"\r\nPress Enter to close this window...";
+            WriteConsoleText(output, prompt);
+            HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+            wchar_t key = L'\0';
+            DWORD charsRead = 0;
+            if (input && input != INVALID_HANDLE_VALUE)
+                ReadConsoleW(input, &key, 1, &charsRead, nullptr);
+        }
+        else if (!written)
+        {
+            MessageBoxW(nullptr, L"Unable to write command-line help to the console.",
+                        L"FRTP", MB_OK | MB_ICONERROR);
+        }
+
+        if (closeOutput)
+            CloseHandle(output);
+        if (allocatedConsole)
+            FreeConsole();
     }
 
     bool IsOcxRegistered()
@@ -179,7 +245,7 @@ BOOL CFRTPApp::InitInstance()
     }
     if (options.showHelp || options.invalid)
     {
-        ShowCommandLineHelp(options.invalid);
+        WriteCommandLineHelp(options.invalid);
         return FALSE;
     }
 

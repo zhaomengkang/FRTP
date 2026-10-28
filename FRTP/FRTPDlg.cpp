@@ -19,6 +19,9 @@ namespace
     const COLORREF kBlue = RGB(0, 0, 205);       // MediumBlue
     const UINT_PTR kTimerId = 1;
     const UINT kTimerMs = 300;
+    constexpr int kBrowserViewportWidth = 640;
+    constexpr int kBrowserViewportHeight = 480;
+    constexpr int kBrowserFrameInset = 2;
 
     struct KeyEntry { UINT id; int normal; int shifted; };
     const KeyEntry kKeys[] = {
@@ -89,6 +92,7 @@ namespace
 BEGIN_MESSAGE_MAP(CFRTPDlg, CDialog)
     ON_WM_CLOSE()
     ON_WM_DESTROY()
+    ON_WM_SIZE()
     ON_WM_TIMER()
     ON_WM_DROPFILES()
     ON_WM_CTLCOLOR()
@@ -147,6 +151,9 @@ BOOL CFRTPDlg::OnInitDialog()
     CDialog::OnInitDialog();
     SetWindowText(kWindowTitle);
     ScaleLayout();
+    ResizeBrowserViewport();
+    LayoutHeaderControls();
+    m_layoutInitialized = true;
     SetIcon(m_hIcon, TRUE);
     SetIcon(m_hIcon, FALSE);
 
@@ -164,6 +171,28 @@ BOOL CFRTPDlg::OnInitDialog()
     m_btKeyShow.SetGlyphFont(L"Segoe UI Symbol", 6);
     m_btTopMost.SetWindowText(L"\U0001F4CC");
     m_btKeyShow.SetWindowText(L"\u2328");
+
+    if (!m_functionKeyFont.CreatePointFont(90, L"MS Shell Dlg"))
+    {
+        Msg(L"Unable to create the function key font.", L"Keyboard layout", MB_ICONWARNING);
+    }
+    else
+    {
+        const UINT functionButtonIds[] = {
+            IDC_BT_PREV, IDC_BT_F1, IDC_BT_F2, IDC_BT_F3,
+            IDC_BT_F4, IDC_BT_F5, IDC_BT_NEXT
+        };
+        for (UINT id : functionButtonIds)
+        {
+            CWnd* button = GetDlgItem(id);
+            if (!button)
+            {
+                Msg(L"Unable to find a function key button.", L"Keyboard layout", MB_ICONERROR);
+                break;
+            }
+            button->SetFont(&m_functionKeyFont, TRUE);
+        }
+    }
 
     for (const auto& kb : kKeyBmps)
     {
@@ -233,9 +262,9 @@ BOOL CFRTPDlg::OnInitDialog()
     CRect echoArea;
     GetDlgItem(IDC_PN_CGTP)->GetWindowRect(&echoArea);
     ScreenToClient(&echoArea);
-    echoArea.DeflateRect(2, 2);
-    int echoWidth = min(640, echoArea.Width());
-    int echoHeight = min(480, echoArea.Height());
+    echoArea.DeflateRect(kBrowserFrameInset, kBrowserFrameInset);
+    int echoWidth = min(kBrowserViewportWidth, echoArea.Width());
+    int echoHeight = min(kBrowserViewportHeight, echoArea.Height());
     m_echoBounds.SetRect(
         echoArea.left + (echoArea.Width() - echoWidth) / 2,
         echoArea.top + (echoArea.Height() - echoHeight) / 2,
@@ -276,9 +305,21 @@ BOOL CFRTPDlg::OnInitDialog()
     m_btShift.SetBackColor(RGB(240, 240, 240));
     m_btKeyShow.SetBackColor(kGreen);
     if (m_autoConnectOnStartup)
+    {
+        m_btConnect.ShowWindow(SW_HIDE);
         PostMessage(WM_COMMAND, MAKEWPARAM(IDC_BT_CONNECT, BN_CLICKED),
                     reinterpret_cast<LPARAM>(m_btConnect.GetSafeHwnd()));
+    }
     return TRUE;
+}
+
+void CFRTPDlg::OnSize(UINT nType, int cx, int cy)
+{
+    CDialog::OnSize(nType, cx, cy);
+    if (!m_layoutInitialized || nType == SIZE_MINIMIZED || cx <= 0 || cy <= 0)
+        return;
+
+    LayoutHeaderControls();
 }
 
 void CFRTPDlg::ScaleLayout()
@@ -316,6 +357,166 @@ void CFRTPDlg::ScaleLayout()
                  MulDiv(client.Height(), 4, 5) + frameHeight,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     CenterWindow();
+}
+
+void CFRTPDlg::ResizeBrowserViewport()
+{
+    CWnd* panel = GetDlgItem(IDC_PN_CGTP);
+    CWnd* webViewHost = GetDlgItem(IDC_WEBVIEW_CGTP);
+    if (!panel || !webViewHost)
+    {
+        Msg(L"Unable to find the browser display area.", L"Browser layout", MB_ICONERROR);
+        return;
+    }
+
+    CRect client;
+    CRect panelBounds;
+    GetClientRect(&client);
+    panel->GetWindowRect(&panelBounds);
+    ScreenToClient(&panelBounds);
+
+    const int oldPanelBottom = panelBounds.bottom;
+    const int panelWidth = kBrowserViewportWidth + 2 * kBrowserFrameInset;
+    const int panelHeight = kBrowserViewportHeight + 2 * kBrowserFrameInset;
+    const int heightChange = panelHeight - panelBounds.Height();
+    panelBounds.right = panelBounds.left + panelWidth;
+    panelBounds.bottom = panelBounds.top + panelHeight;
+
+    for (CWnd* child = GetWindow(GW_CHILD); child;)
+    {
+        CWnd* next = child->GetNextWindow();
+        const int id = child->GetDlgCtrlID();
+        if (id != IDC_PN_CGTP && id != IDC_EXPLORER_CGTP && id != IDC_WEBVIEW_CGTP)
+        {
+            CRect bounds;
+            child->GetWindowRect(&bounds);
+            ScreenToClient(&bounds);
+            if (bounds.top >= oldPanelBottom)
+            {
+                bounds.OffsetRect(0, heightChange);
+                if (!::MoveWindow(child->GetSafeHwnd(), bounds.left, bounds.top,
+                                  bounds.Width(), bounds.Height(), FALSE))
+                    Msg(L"Unable to reposition a control below the browser display area.", L"Browser layout", MB_ICONERROR);
+            }
+        }
+        child = next;
+    }
+
+    if (!::MoveWindow(panel->GetSafeHwnd(), panelBounds.left, panelBounds.top,
+                      panelBounds.Width(), panelBounds.Height(), FALSE))
+    {
+        Msg(L"Unable to resize the browser display frame.", L"Browser layout", MB_ICONERROR);
+        return;
+    }
+
+    CRect webViewBounds(
+        panelBounds.left + kBrowserFrameInset,
+        panelBounds.top + kBrowserFrameInset,
+        panelBounds.left + kBrowserFrameInset + kBrowserViewportWidth,
+        panelBounds.top + kBrowserFrameInset + kBrowserViewportHeight);
+    if (!::MoveWindow(webViewHost->GetSafeHwnd(), webViewBounds.left, webViewBounds.top,
+                      webViewBounds.Width(), webViewBounds.Height(), FALSE))
+    {
+        Msg(L"Unable to resize the WebView2 display area.", L"Browser layout", MB_ICONERROR);
+        return;
+    }
+
+    CRect window;
+    GetWindowRect(&window);
+    GetClientRect(&client);
+    const int frameWidth = window.Width() - client.Width();
+    const int frameHeight = window.Height() - client.Height();
+    const int clientWidth = max(client.Width(), panelBounds.right + 8);
+    const int clientHeight = client.Height() + heightChange;
+    if (!SetWindowPos(nullptr, 0, 0, clientWidth + frameWidth, clientHeight + frameHeight,
+                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE))
+    {
+        Msg(L"Unable to resize the application window for the browser display area.", L"Browser layout", MB_ICONERROR);
+        return;
+    }
+    CenterWindow();
+}
+
+void CFRTPDlg::LayoutHeaderControls()
+{
+    CRect client;
+    GetClientRect(&client);
+
+    const UINT sideButtonIds[] = { IDC_BT_HELP, IDC_BT_TBKEYSHOW, IDC_BT_TOPMOST };
+    int sideButtonLeft = client.Width();
+    for (UINT id : sideButtonIds)
+    {
+        CWnd* button = GetDlgItem(id);
+        if (!button)
+        {
+            Msg(L"Unable to find a side toolbar button.", L"Toolbar layout", MB_ICONERROR);
+            return;
+        }
+
+        CRect bounds;
+        button->GetWindowRect(&bounds);
+        ScreenToClient(&bounds);
+        const int left = client.Width() - 6 - bounds.Width();
+        if (!::MoveWindow(button->GetSafeHwnd(), left, bounds.top,
+                          bounds.Width(), bounds.Height(), FALSE))
+        {
+            Msg(L"Unable to align the side toolbar buttons.", L"Toolbar layout", MB_ICONERROR);
+            return;
+        }
+        sideButtonLeft = min(sideButtonLeft, left);
+    }
+
+    CWnd* connect = GetDlgItem(IDC_BT_CONNECT);
+    if (!connect)
+    {
+        Msg(L"Unable to find the connection button.", L"Toolbar layout", MB_ICONERROR);
+        return;
+    }
+
+    CRect connectBounds;
+    connect->GetWindowRect(&connectBounds);
+    ScreenToClient(&connectBounds);
+
+    constexpr int gap = 4;
+    const int minimumWidths[] = { 96, 40, 88, 35, 96, 62 };
+    int minimumTotal = connectBounds.Width() + 6 * gap;
+    for (int width : minimumWidths)
+        minimumTotal += width;
+
+    const int rightLimit = sideButtonLeft - 8;
+    const int extra = max(0, rightLimit - connectBounds.left - minimumTotal);
+    const int third = extra / 3;
+    struct HeaderField { UINT id; int width; };
+    const HeaderField fields[] = {
+        { IDC_TB_ROBOTIP, 96 + third },
+        { IDC_LB_NAME, 40 },
+        { IDC_TB_NAME, 88 + third },
+        { IDC_LB_PASSWORD, 35 },
+        { IDC_TB_PASSWORD, 96 + extra - 2 * third },
+        { IDC_CB_BFSELECT, 62 }
+    };
+
+    int left = connectBounds.right + gap;
+    for (const HeaderField& field : fields)
+    {
+        CWnd* control = GetDlgItem(field.id);
+        if (!control)
+        {
+            Msg(L"Unable to find a header field.", L"Toolbar layout", MB_ICONERROR);
+            return;
+        }
+
+        CRect bounds;
+        control->GetWindowRect(&bounds);
+        ScreenToClient(&bounds);
+        if (!::MoveWindow(control->GetSafeHwnd(), left, bounds.top,
+                          field.width, bounds.Height(), FALSE))
+        {
+            Msg(L"Unable to resize the header fields.", L"Toolbar layout", MB_ICONERROR);
+            return;
+        }
+        left += field.width + gap;
+    }
 }
 
 BOOL CFRTPDlg::PreTranslateMessage(MSG* pMsg)
@@ -406,6 +607,51 @@ void CFRTPDlg::SetKeyboardVisible(bool visible)
     int nonClient = wr.Height() - cr.Height();
     SetWindowPos(nullptr, 0, 0, wr.Width(), clientH + nonClient, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     m_btKeyShow.SetBackColor(visible ? kGreen : RGB(240, 240, 240));
+}
+
+void CFRTPDlg::LayoutFunctionKeys(int controllerType)
+{
+    const UINT buttonIds[] = { IDC_BT_F1, IDC_BT_F2, IDC_BT_F3, IDC_BT_F4, IDC_BT_F5 };
+    const int compactPositions[] = { 82, 172, 262, 352, 442 };
+    const int standardPositions[] = { 111, 186, 261, 336, 411 };
+    const int* positions = controllerType == 1 || controllerType == 2
+        ? compactPositions
+        : standardPositions;
+
+    for (size_t i = 0; i < 5; ++i)
+    {
+        CWnd* button = GetDlgItem(buttonIds[i]);
+        if (!button)
+        {
+            Msg(L"Unable to find a function key button.", L"Keyboard layout", MB_ICONERROR);
+            return;
+        }
+
+        CRect position(positions[i], 0, positions[i], 0);
+        if (!::MapDialogRect(m_hWnd, &position))
+        {
+            Msg(L"Unable to convert the function key layout.", L"Keyboard layout", MB_ICONERROR);
+            return;
+        }
+        const int left = MulDiv(position.left, 4, 5);
+        CRect bounds;
+        button->GetWindowRect(&bounds);
+        ScreenToClient(&bounds);
+        CRect oldBounds = bounds;
+        bounds.OffsetRect(left - bounds.left, 0);
+        if (!::MoveWindow(button->GetSafeHwnd(), bounds.left, bounds.top,
+                          bounds.Width(), bounds.Height(), TRUE))
+        {
+            Msg(L"Unable to reposition the function key buttons.", L"Keyboard layout", MB_ICONERROR);
+            return;
+        }
+        if (!RedrawWindow(&oldBounds, nullptr,
+                          RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW))
+        {
+            Msg(L"Unable to redraw the previous function key positions.", L"Keyboard layout", MB_ICONERROR);
+            return;
+        }
+    }
 }
 
 void CFRTPDlg::SetRobotCfgVisible(bool visible)
@@ -501,6 +747,7 @@ void CFRTPDlg::InitAll()
 {
     KillTimer(kTimerId);
     m_session++;
+    LayoutFunctionKeys(0);
     m_ftp.reset();
     m_connected = false;
     m_online = false;
@@ -647,6 +894,7 @@ void CFRTPDlg::ConnectWorker(int session, std::wstring ip, std::wstring user, st
     PostToUi(hwnd, [=] {
         if (session != m_session) return;
         m_robotType = robot;
+        LayoutFunctionKeys(type);
         m_robotName = name;
         m_robotIp = ip;
         m_adminUser = user;
@@ -761,6 +1009,13 @@ void CFRTPDlg::PollRobot()
 
 void CFRTPDlg::RestartApp()
 {
+    if (m_autoConnectOnStartup)
+    {
+        InitAll();
+        EndDialog(IDCANCEL);
+        return;
+    }
+
     wchar_t path[MAX_PATH];
     ::GetModuleFileNameW(nullptr, path, MAX_PATH);
     InitAll();

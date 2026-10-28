@@ -25,6 +25,7 @@ protected:
     DECLARE_MESSAGE_MAP()
     afx_msg void OnClose();
     afx_msg void OnDestroy();
+    afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnTimer(UINT_PTR id);
     afx_msg void OnDropFiles(HDROP hDrop);
     afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
@@ -47,8 +48,10 @@ private:
     CComPtr<IWebBrowser2> m_webBrowser;
     CStatic m_picSwitch;
     CFont m_scaledFont;
+    CFont m_functionKeyFont;
     CString m_ip, m_user, m_pass;
     bool m_autoConnectOnStartup = false;
+    bool m_layoutInitialized = false;
     BOOL m_exitUi = FALSE;
     BOOL m_comment = TRUE;
 
@@ -91,7 +94,10 @@ private:
     void LoadIp();
     void SaveIp();
     void ScaleLayout();
+    void ResizeBrowserViewport();
+    void LayoutHeaderControls();
     void InitAll();
+    void LayoutFunctionKeys(int controllerType);
     void SetPanelEnabled(bool enable);
     void SetKeyboardVisible(bool visible);
     void SetRobotCfgVisible(bool visible);

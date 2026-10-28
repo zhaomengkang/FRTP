@@ -50,7 +50,7 @@ URL: https://github.com/zhaomengkang/FRTeachPendant
 
 ## Instructions
 ### Command Line
-Run `FRTP.exe <IP> <Name> <Pwd>` to start the application and connect automatically. Use `FRTP.exe -h` or `FRTP.exe --help` to display the English command-line help. Running without arguments opens the application without connecting.
+Run `FRTP.exe <IP> <Name> <Pwd>` to start the application and connect automatically. In this mode, the connect/disconnect button is hidden and the application exits if the controller disconnects. Use `FRTP.exe -h` or `FRTP.exe --help` to print the English command-line help to the console. Running without arguments opens the application without connecting.
 
 > **Security:** A password supplied on the command line may be visible in process listings and shell history.
 
