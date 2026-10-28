@@ -78,7 +78,7 @@ IDR_MAINFRAME           ICON                    "res\\FRTP.ico"
 // Dialog
 //
 
-IDD_FRTP_DIALOG DIALOGEX 0, 0, 455, 435
+IDD_FRTP_DIALOG DIALOGEX 0, 0, 580, 550
 STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_APPWINDOW
 CAPTION "FRTP V26.10.22"
@@ -306,4 +306,3 @@ LANGUAGE 9, 1
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-
