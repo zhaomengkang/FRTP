@@ -30,8 +30,17 @@ SetupIconFile=icon\FRTP.ico
 CloseApplications=yes
 RestartApplications=no
 
+; The machine wide PATH is updated when the user keeps the "add to PATH" task, so running
+; applications (Explorer, command prompts opened afterwards) are told about the change.
+ChangesEnvironment=yes
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+; Checked by default: FRTP can be started from a command prompt. Unchecking it leaves the
+; system PATH untouched.
+Name: "path"; Description: "Add FRTP to the system PATH (run ""FRTP"" from a command prompt)"; GroupDescription: "Additional options:"
 
 [Files]
 ; A Release|Win32 build ships the EXE only: the KAREL programs, the help page and the
@@ -90,6 +99,9 @@ const
 
   { Microsoft Edge WebView2 Runtime client ID. }
   WebView2ClientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+  { System environment key that holds the machine wide PATH. }
+  EnvironmentKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
 
 var
   OcxForceRegPage: TInputOptionWizardPage;
@@ -651,6 +663,130 @@ begin
 end;
 
 
+{ Trims blanks and trailing backslashes so two spellings of the same folder compare equal. }
+function NormalizePathEntry(Entry: String): String;
+var
+  Value: String;
+begin
+  Value := Trim(Entry);
+  while (Length(Value) > 0) and (Value[Length(Value)] = #92) do
+    Delete(Value, Length(Value), 1);
+  Result := Value;
+end;
+
+{ Returns True when the semicolon separated list already holds the given folder. }
+function PathListContains(PathList, Entry: String): Boolean;
+var
+  Rest, Item: String;
+  P: Integer;
+begin
+  Result := False;
+  Rest := PathList;
+  while Rest <> '' do
+  begin
+    P := Pos(';', Rest);
+    if P = 0 then
+    begin
+      Item := Rest;
+      Rest := '';
+    end
+    else
+    begin
+      Item := Copy(Rest, 1, P - 1);
+      Rest := Copy(Rest, P + 1, Length(Rest));
+    end;
+    if CompareText(NormalizePathEntry(Item), Entry) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ Appends the application bin folder to the machine wide PATH. }
+procedure AddToSystemPath();
+var
+  PathList, Entry, NewPath: String;
+begin
+  Entry := NormalizePathEntry(ExpandConstant('{app}\bin'));
+
+  if not RegQueryStringValue(HKLM, EnvironmentKey, 'Path', PathList) then
+    PathList := '';
+
+  if PathListContains(PathList, Entry) then
+  begin
+    Log('System PATH already contains ' + Entry);
+    Exit;
+  end;
+
+  if PathList = '' then
+    NewPath := Entry
+  else if PathList[Length(PathList)] = ';' then
+    NewPath := PathList + Entry
+  else
+    NewPath := PathList + ';' + Entry;
+
+  if RegWriteExpandStringValue(HKLM, EnvironmentKey, 'Path', NewPath) then
+    Log('Added ' + Entry + ' to the system PATH')
+  else
+    MsgBox('FRTP could not be added to the system PATH.' + #13#10 + #13#10 +
+           'Add "' + Entry + '" manually if you want to run FRTP from a command prompt.',
+           mbError, MB_OK);
+end;
+
+{ Removes every occurrence of the application bin folder from the machine wide PATH. }
+procedure RemoveFromSystemPath();
+var
+  PathList, Entry, NewPath, Rest, Item: String;
+  P: Integer;
+  First: Boolean;
+begin
+  Entry := NormalizePathEntry(ExpandConstant('{app}\bin'));
+
+  if not RegQueryStringValue(HKLM, EnvironmentKey, 'Path', PathList) then
+    Exit;
+
+  NewPath := '';
+  First := True;
+  Rest := PathList;
+  while Rest <> '' do
+  begin
+    P := Pos(';', Rest);
+    if P = 0 then
+    begin
+      Item := Rest;
+      Rest := '';
+    end
+    else
+    begin
+      Item := Copy(Rest, 1, P - 1);
+      Rest := Copy(Rest, P + 1, Length(Rest));
+    end;
+
+    if CompareText(NormalizePathEntry(Item), Entry) <> 0 then
+    begin
+      if First then
+        First := False
+      else
+        NewPath := NewPath + ';';
+      NewPath := NewPath + Item;
+    end;
+  end;
+
+  if NewPath = PathList then
+  begin
+    Log('System PATH does not contain ' + Entry);
+    Exit;
+  end;
+
+  if RegWriteExpandStringValue(HKLM, EnvironmentKey, 'Path', NewPath) then
+    Log('Removed ' + Entry + ' from the system PATH')
+  else
+    MsgBox('FRTP could not be removed from the system PATH.' + #13#10 + #13#10 +
+           'Remove "' + Entry + '" manually if needed.',
+           mbError, MB_OK);
+end;
+
 { Executes runtime installation, OCX registration, and cleanup. }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
@@ -696,6 +832,10 @@ begin
   { Install WebView2 only when it is missing. }
   InstallWebView2IfNeeded();
 
+  { Put the application folder on the system PATH when the task is kept. }
+  if WizardIsTaskSelected('path') then
+    AddToSystemPath();
+
   WizardForm.StatusLabel.Caption :=
     'Cleaning up runtime installer files...';
   WizardForm.Refresh;
@@ -721,6 +861,51 @@ begin
   WizardForm.StatusLabel.Caption :=
     'Installation completed.';
   WizardForm.Refresh;
+end;
+
+
+{ Deletes the per-user folders the application created: the unpacked embedded data, the
+  WebView2 profile and the saved robot address. Only the profile of the user who runs the
+  uninstaller is touched, which is why this is done here instead of in a script section. }
+procedure RemoveLocalCache();
+var
+  Base, AppDir, Sub: String;
+begin
+  Base := GetEnv('LOCALAPPDATA');
+  if Base = '' then
+    Exit;
+
+  AppDir := Base + '\FRTP';
+  if not DirExists(AppDir) then
+    Exit;
+
+  Sub := AppDir + '\data';
+  if DirExists(Sub) then
+    DelTree(Sub, True, True, True);
+
+  Sub := AppDir + '\WebView2';
+  if DirExists(Sub) then
+    DelTree(Sub, True, True, True);
+
+  Sub := AppDir + '\robot_ip.txt';
+  if FileExists(Sub) then
+    DeleteFile(Sub);
+
+  { Remove the now empty FRTP folder; it is left in place when anything else lives there. }
+  if DirExists(AppDir) then
+    RemoveDir(AppDir);
+
+  Log('Removed the per-user folders under ' + AppDir);
+end;
+
+{ The uninstaller drops the PATH entry it may have added during installation. }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    RemoveFromSystemPath();
+    RemoveLocalCache();
+  end;
 end;
 
 
@@ -751,11 +936,8 @@ Filename: "netsh.exe"; \
 
 
 [UninstallDelete]
-; Remove the complete application directory during uninstallation.
+; Remove the complete application directory during uninstallation. The per-user folders
+; (%LOCALAPPDATA%\FRTP) are removed by RemoveLocalCache() in [Code] instead: the installer
+; runs elevated, so a {localappdata} constant would point at the profile of whoever started
+; the setup rather than at the profile that is actually being cleaned.
 Type: filesandordirs; Name: "{app}"
-
-; Remove the folder FRTP.exe unpacks its embedded data into.
-Type: filesandordirs; Name: "{localappdata}\FRTP\data"
-
-; Remove the WebView2 profile the application creates for its browser control.
-Type: filesandordirs; Name: "{localappdata}\FRTP\WebView2"
