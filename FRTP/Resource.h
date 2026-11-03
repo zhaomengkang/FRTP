@@ -112,11 +112,17 @@
 #define IDC_WEBVIEW_HELP                1201
 #define IDC_TB_INPUT                    1202
 
+#define IDR_DATA_HELP                   300
+#define IDR_DATA_KAREL_7DA              301
+#define IDR_DATA_KAREL_7DC              302
+#define IDR_DATA_KAREL_7DF              303
+#define IDR_DATA_KAREL_7DH              304
+#define IDR_DATA_WEBVIEW2LOADER         305
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        300
+#define _APS_NEXT_RESOURCE_VALUE        306
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1300
 #define _APS_NEXT_SYMED_VALUE           107

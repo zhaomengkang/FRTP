@@ -65,6 +65,7 @@ private:
     int m_dialogBaseUnitX1000 = 0;
     int m_fullClientH = 0;
     int m_collapsedClientH = 0;
+    int m_edgeFitRetries = 0;        // timer ticks left to re-measure the WebView2 page layout
 
     // state
     CToolTipCtrl m_tip;
@@ -98,6 +99,7 @@ private:
     void ScaleLayout();
     void ResizeBrowserViewport();
     void LayoutHeaderControls();
+    void LayoutSideButtons(const CRect& panel);
     void InitAll();
     void LayoutFunctionKeys(int controllerType);
     void SetPanelEnabled(bool enable);

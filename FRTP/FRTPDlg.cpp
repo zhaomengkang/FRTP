@@ -7,6 +7,7 @@
 #include "RobotChecker.h"
 #include "FtpClient.h"
 #include "FRLoadUserPC.h"
+#include "DataRes.h"
 #include <atlhost.h>
 #include <atlcomcli.h>
 
@@ -22,6 +23,20 @@ namespace
     constexpr int kBrowserViewportWidth = 640;
     constexpr int kBrowserViewportHeight = 480;
     constexpr int kBrowserFrameInset = 2;
+
+    // Right-hand toolbar column, in the fixed pixel space the whole layout uses.
+    // The column hugs the browser frame so no dead space is left to its left.
+    constexpr int kSideButtonWidth = 24;
+    constexpr int kSideButtonHeight = 22;
+    constexpr int kSideButtonGap = 6;       // gap between the browser frame and the column
+    constexpr int kSideButtonSpacing = 3;   // gap between two stacked side buttons
+    constexpr int kSideButtonInset = 6;     // header row stops this far left of the column
+    constexpr int kRightMargin = 6;
+
+    // Zoom of the WebView2 content. The page must look the same on every Windows scaling
+    // setting: the browser is created with a 1:1 rasterization scale (see CWebView2Host), so
+    // this value alone decides the size of the robot page.
+    constexpr double kBrowserBaseZoom = 0.6;
 
     struct KeyEntry { UINT id; int normal; int shifted; };
     const KeyEntry kKeys[] = {
@@ -157,6 +172,13 @@ BOOL CFRTPDlg::OnInitDialog()
         Msg(L"Unable to determine the display DPI. The layout will use 96 DPI.", L"FRTP", MB_ICONWARNING);
         m_dpi = 96;
     }
+    // Counter the Windows display scaling for the embedded browsers: they must keep the
+    // 100 % scale they show on a 100 % display, whatever the scaling setting is.
+    // MSHTML already lays the IE control out at one CSS pixel per device pixel, so only
+    // WebView2 needs the compensation, and it applies it itself.
+    DataRes::LogLine(L"startup: layout dpi=" + std::to_wstring(m_dpi) +
+                     L" system dpi=" + std::to_wstring(SystemDpi()) +
+                     L" zoom=" + std::to_wstring(kBrowserBaseZoom));
     CRect dialogUnits(0, 0, 1000, 0);
     if (!::MapDialogRect(m_hWnd, &dialogUnits) || dialogUnits.Width() <= 0)
     {
@@ -181,8 +203,8 @@ BOOL CFRTPDlg::OnInitDialog()
     m_btTopMost.SetColors(RGB(240, 240, 240));
     m_btKeyShow.SetColors(RGB(240, 240, 240));
     m_btUpload.SetColors(RGB(240, 240, 240));
-    m_btTopMost.SetGlyphFont(L"Segoe UI Symbol", 6);
-    m_btKeyShow.SetGlyphFont(L"Segoe UI Symbol", 6);
+    m_btTopMost.SetGlyphFont(L"Segoe UI Symbol", 8);
+    m_btKeyShow.SetGlyphFont(L"Segoe UI Symbol", 8);
     m_btTopMost.SetWindowText(L"\U0001F4CC");
     m_btKeyShow.SetWindowText(L"\u2328");
 
@@ -258,7 +280,7 @@ BOOL CFRTPDlg::OnInitDialog()
     GetDlgItem(IDC_LB_HOSTNAME)->ShowWindow(SW_HIDE);
 
     m_tip.Create(this, TTS_ALWAYSTIP);
-    m_tip.SetMaxTipWidth(300);
+    m_tip.SetMaxTipWidth(460);   // long multi-line tips wrap at this width
     struct { UINT id; const wchar_t* text; } tips[] = {
         { IDC_TB_ROBOTIP, L"Enter the IP address of the robot controller." },
         { IDC_BT_CONNECT, L"Connect to the robot controller" },
@@ -269,6 +291,22 @@ BOOL CFRTPDlg::OnInitDialog()
         { IDC_TB_NAME, L"Administrator username for password-protected functions (level: INSTALL)" },
         { IDC_TB_PASSWORD, L"Administrator password for password-protected functions" },
         { IDC_BT_HELP, L"Something went wrong? Click here for help" },
+        { IDC_BT_DOWNLOAD,
+          L"Download the currently selected program ($TP_DEFPROG).\r\n"
+          L"Note: System macros are excluded." },
+        { IDC_CB_COMMENT, L"Export the LS program with register and I/O comments." },
+        { IDC_BT_UPLOADAREA,
+          L"Drag program files to this area to upload them to the controller.\r\n"
+          L"Only LS, TP, PC, and VR file types are supported.\r\n"
+          L"Note: KAREL programs and VR variables must be compatible with the target controller version." },
+        { IDC_CB_BFSELECT,
+          L"If an unsupported screen is opened and the application crashes, please check this option.\r\n"
+          L"This will reset the active screen to the Program List screen (SELECT).\r\n"
+          L"\r\n"
+          L"Currently known screens that may cause crashes:\r\n"
+          L"1. 4D graphics display.\r\n"
+          L"2. Bus configuration screens that require WinCE support, such as PROFINET.\r\n"
+          L"3. Keyboard View." },
     };
     for (auto& t : tips) m_tip.AddTool(GetDlgItem(t.id), t.text);
     m_tip.Activate(TRUE);
@@ -400,7 +438,6 @@ void CFRTPDlg::ResizeBrowserViewport()
     ScreenToClient(&panelBounds);
 
     const int frameInset = kBrowserFrameInset;
-    const int rightPadding = 8;
     const int frameWidth = window.Width() - client.Width();
     const int frameHeight = window.Height() - client.Height();
     const int viewportWidth = kBrowserViewportWidth;
@@ -452,20 +489,17 @@ void CFRTPDlg::ResizeBrowserViewport()
     }
 
     const UINT sideButtonIds[] = { IDC_BT_HELP, IDC_BT_TBKEYSHOW, IDC_BT_TOPMOST };
-    int sideButtonWidth = 0;
     for (UINT id : sideButtonIds)
     {
-        CWnd* button = GetDlgItem(id);
-        if (!button)
+        if (!GetDlgItem(id))
         {
             Msg(L"Unable to find a side toolbar button.", L"Toolbar layout", MB_ICONERROR);
             return;
         }
-        CRect bounds;
-        button->GetWindowRect(&bounds);
-        sideButtonWidth = max(sideButtonWidth, bounds.Width());
     }
 
+    // The column is pinned to the browser frame, so it never leaves a dead band on its left.
+    LayoutSideButtons(panelBounds);
     GetClientRect(&client);
     int rightmostChild = panelBounds.right;
     int lowestChild = panelBounds.bottom;
@@ -478,11 +512,8 @@ void CFRTPDlg::ResizeBrowserViewport()
         lowestChild = max(lowestChild, bounds.bottom);
     }
 
-    const int clientWidth = max(
-        client.Width(),
-        max(rightmostChild + rightPadding,
-            panelBounds.right + rightPadding + sideButtonWidth + 6));
-    const int clientHeight = max(client.Height() + heightChange, lowestChild + 8);
+    const int clientWidth = max(rightmostChild + kRightMargin, panelBounds.right + kRightMargin);
+    const int clientHeight = max(client.Height() + heightChange, lowestChild + kRightMargin);
     const int windowWidth = clientWidth + frameWidth;
     const int windowHeight = clientHeight + frameHeight;
     const int windowLeft = workArea.left + max(0, (workArea.Width() - windowWidth) / 2);
@@ -495,13 +526,11 @@ void CFRTPDlg::ResizeBrowserViewport()
     }
 }
 
-void CFRTPDlg::LayoutHeaderControls()
+void CFRTPDlg::LayoutSideButtons(const CRect& panel)
 {
-    CRect client;
-    GetClientRect(&client);
-
     const UINT sideButtonIds[] = { IDC_BT_HELP, IDC_BT_TBKEYSHOW, IDC_BT_TOPMOST };
-    int sideButtonLeft = client.Width();
+    const int left = panel.right + kSideButtonGap;
+    int top = panel.top;
     for (UINT id : sideButtonIds)
     {
         CWnd* button = GetDlgItem(id);
@@ -510,19 +539,30 @@ void CFRTPDlg::LayoutHeaderControls()
             Msg(L"Unable to find a side toolbar button.", L"Toolbar layout", MB_ICONERROR);
             return;
         }
-
-        CRect bounds;
-        button->GetWindowRect(&bounds);
-        ScreenToClient(&bounds);
-        const int left = client.Width() - 6 - bounds.Width();
-        if (!::MoveWindow(button->GetSafeHwnd(), left, bounds.top,
-                          bounds.Width(), bounds.Height(), FALSE))
+        if (!::MoveWindow(button->GetSafeHwnd(), left, top,
+                          kSideButtonWidth, kSideButtonHeight, TRUE))
         {
-            Msg(L"Unable to align the side toolbar buttons.", L"Toolbar layout", MB_ICONERROR);
+            Msg(L"Unable to place the side toolbar buttons.", L"Toolbar layout", MB_ICONERROR);
             return;
         }
-        sideButtonLeft = min(sideButtonLeft, left);
+        top += kSideButtonHeight + kSideButtonSpacing;
     }
+}
+
+void CFRTPDlg::LayoutHeaderControls()
+{
+    // Keep the side column glued to the browser frame; the header row stops just left of it.
+    CRect panelBounds;
+    CWnd* panel = GetDlgItem(IDC_PN_CGTP);
+    if (!panel)
+    {
+        Msg(L"Unable to find the browser display area.", L"Toolbar layout", MB_ICONERROR);
+        return;
+    }
+    panel->GetWindowRect(&panelBounds);
+    ScreenToClient(&panelBounds);
+    LayoutSideButtons(panelBounds);
+    const int sideButtonLeft = panelBounds.right + kSideButtonGap;
 
     CWnd* connect = GetDlgItem(IDC_BT_CONNECT);
     if (!connect)
@@ -541,7 +581,7 @@ void CFRTPDlg::LayoutHeaderControls()
     for (int width : minimumWidths)
         minimumTotal += width;
 
-    const int rightLimit = sideButtonLeft - 8;
+    const int rightLimit = sideButtonLeft - kSideButtonInset;
     const int extra = max(0, rightLimit - connectBounds.left - minimumTotal);
     const int third = extra / 3;
     struct HeaderField { UINT id; int width; };
@@ -575,6 +615,11 @@ void CFRTPDlg::LayoutHeaderControls()
         }
         left += field.width + gap;
     }
+
+    // The controls moved, so repaint the strip they left behind instead of keeping its old ink.
+    CRect headerArea(0, 0, max(left, sideButtonLeft + kSideButtonWidth), panelBounds.top);
+    RedrawWindow(&headerArea, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 BOOL CFRTPDlg::PreTranslateMessage(MSG* pMsg)
@@ -618,16 +663,26 @@ int CFRTPDlg::Ask(const std::wstring& text, const wchar_t* caption, UINT flags)
 
 void CFRTPDlg::LoadIp()
 {
-    std::wstring path = PathCombine2(ExeDir(), L"robot_ip.txt");
-    if (!FileExists(path)) return;
-    std::wstring ip = Trim(ReadTextFile(path));
-    if (!ip.empty()) m_ip = ip.c_str();
+    // The address is remembered in the per-user settings folder, so it survives an update and
+    // works for the single-file deployment where the EXE folder is read-only or temporary.
+    for (const std::wstring& path : { PathCombine2(SettingsDir(), L"robot_ip.txt"),
+                                      PathCombine2(ExeDir(), L"robot_ip.txt") })
+    {
+        if (!FileExists(path)) continue;
+        const std::wstring ip = Trim(ReadTextFile(path));
+        if (!ip.empty())
+        {
+            m_ip = ip.c_str();
+            return;
+        }
+    }
 }
 
 void CFRTPDlg::SaveIp()
 {
     UpdateData(TRUE);
-    WriteTextFile(PathCombine2(ExeDir(), L"robot_ip.txt"), std::wstring(m_ip));
+    if (!WriteTextFile(PathCombine2(SettingsDir(), L"robot_ip.txt"), std::wstring(m_ip)))
+        WriteTextFile(PathCombine2(ExeDir(), L"robot_ip.txt"), std::wstring(m_ip));
 }
 
 // ---------------------------------------------------------------- panel / layout
@@ -803,6 +858,7 @@ void CFRTPDlg::InitAll()
 {
     KillTimer(kTimerId);
     m_session++;
+    m_edgeFitRetries = 0;
     LayoutFunctionKeys(0);
     m_ftp.reset();
     m_connected = false;
@@ -842,6 +898,8 @@ void CFRTPDlg::OnBnClickedConnect()
     if (text != L"Connect") return;
 
     UpdateData(TRUE);
+    // Remember the address as soon as the user connects, so a failed attempt does not lose it.
+    SaveIp();
     std::wstring ip = Trim(std::wstring(m_ip));
     PingResult pr = PingHost(ip, 100);
     if (pr == PingResult::InvalidAddress)
@@ -959,7 +1017,9 @@ void CFRTPDlg::ConnectWorker(int session, std::wstring ip, std::wstring user, st
         m_connected = true;
         m_online = true;
 
-        bool ie = type != 4;
+        // R-30iB Plus and R-50iA pages only work in the WebView2 (Chromium) engine; the older
+        // controllers keep using the IE control.
+        bool ie = type <= 2;
         std::wstring url = L"http://" + ip + L":80/frh/cgtp/echo.htm";
         if (ie)
         {
@@ -987,8 +1047,9 @@ void CFRTPDlg::ConnectWorker(int session, std::wstring ip, std::wstring user, st
                     return;
                 }
                 m_edgeInitialized = true;
-                m_edge.Init(webViewHost->GetSafeHwnd(), webViewBounds, WebView2DataFolder(), 0.5,
-                    [this, session](bool ok)
+                m_edge.Init(webViewHost->GetSafeHwnd(), webViewBounds, WebView2DataFolder(), kBrowserBaseZoom,
+                    std::wstring(),
+                    [this, session, url](bool ok)
                     {
                         if (!ok)
                         {
@@ -996,8 +1057,13 @@ void CFRTPDlg::ConnectWorker(int session, std::wstring ip, std::wstring user, st
                             if (session == m_session && m_connected && !m_edgeFailedShown)
                             {
                                 m_edgeFailedShown = true;
-                                Msg(L"Unable to initialize the Edge WebView2 browser. Verify that the WebView2 Runtime is installed, then reconnect.",
-                                    L"WebView2", MB_ICONERROR);
+                                // Keep the teach pendant screen visible: the IE control renders the
+                                // same page, so fall back to it instead of leaving a blank panel.
+                                ShowBrowser(true);
+                                NavigateIe(url);
+                                Msg(L"Unable to initialize the Edge WebView2 browser; showing the page with the IE control instead.\r\n\r\n"
+                                    L"Diagnostics: '" + DataRes::CacheRoot() + L"\\webview2.log'",
+                                    L"WebView2", MB_ICONWARNING);
                             }
                             return;
                         }
@@ -1007,6 +1073,7 @@ void CFRTPDlg::ConnectWorker(int session, std::wstring ip, std::wstring user, st
             NavigateIe(L"about:blank");
             ShowBrowser(false);
             m_edge.Navigate(url);
+            m_edgeFitRetries = 12;   // ~3.6 s of re-measuring while the page settles
         }
 
         SetTimer(kTimerId, kTimerMs, nullptr);
@@ -1033,6 +1100,13 @@ void CFRTPDlg::OnTimer(UINT_PTR id)
 
 void CFRTPDlg::PollRobot()
 {
+    if (m_edgeFitRetries > 0 && m_edge.IsReady())
+    {
+        // The robot page keeps loading after the navigation completes (frames, images), so the
+        // layout is measured again for a few seconds and the zoom follows if the page got wider.
+        --m_edgeFitRetries;
+        m_edge.FitPageWidth();
+    }
     if (!m_connected || m_pollBusy.exchange(true)) return;
     HWND hwnd = m_hWnd;
     int session = m_session;

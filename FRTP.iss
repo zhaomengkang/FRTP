@@ -34,11 +34,11 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; MFC application and runtime files from a Release|Win32 build.
-Source: "FRTP\bin\Release\*"; \
+; A Release|Win32 build ships the EXE only: the KAREL programs, the help page and the
+; WebView2 loader are embedded and unpacked to %LOCALAPPDATA%\FRTP\data on first start.
+Source: "FRTP\bin\Release\FRTP.exe"; \
   DestDir: "{app}\bin"; \
-  Excludes: "*.pdb,robot_ip.txt"; \
-  Flags: ignoreversion recursesubdirs createallsubdirs
+  Flags: ignoreversion
 
 ; OCX components and related UI files.
 Source: "Support\UIF\*"; \
@@ -69,6 +69,13 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; \
 
 Name: "{autodesktop}\{#MyAppName}"; \
   Filename: "{app}\bin\{#MyAppExeName}"
+
+[InstallDelete]
+; Leftovers from installers that still shipped the data folders next to the EXE:
+; KAREL, the help page and the WebView2 loader now live inside FRTP.exe.
+Type: filesandordirs; Name: "{app}\bin\KAREL"
+Type: filesandordirs; Name: "{app}\bin\res"
+Type: filesandordirs; Name: "{app}\bin\runtimes"
 
 [Code]
 
@@ -746,3 +753,9 @@ Filename: "netsh.exe"; \
 [UninstallDelete]
 ; Remove the complete application directory during uninstallation.
 Type: filesandordirs; Name: "{app}"
+
+; Remove the folder FRTP.exe unpacks its embedded data into.
+Type: filesandordirs; Name: "{localappdata}\FRTP\data"
+
+; Remove the WebView2 profile the application creates for its browser control.
+Type: filesandordirs; Name: "{localappdata}\FRTP\WebView2"

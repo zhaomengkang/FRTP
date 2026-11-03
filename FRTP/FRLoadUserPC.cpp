@@ -2,6 +2,7 @@
 #include "Util.h"
 #include "FtpClient.h"
 #include "MkWebClient.h"
+#include "DataRes.h"
 #include "FRLoadUserPC.h"
 
 namespace FRLoadUserPC
@@ -14,17 +15,11 @@ namespace FRLoadUserPC
             ToLower(appTitle).find(ToLower(serverVersion)) != std::wstring::npos)
             return true;
 
-        const wchar_t* folder = nullptr;
-        switch (controllerType)
-        {
-        case 1: folder = L"7DA"; break;
-        case 2: folder = L"7DC"; break;
-        case 3: folder = L"7DF"; break;
-        case 4: folder = L"7DH"; break;
-        default: throw AppError(L"Invalid controller type");
-        }
-
-        std::wstring local = PathCombine2(PathCombine2(PathCombine2(ExeDir(), L"KAREL"), folder), L"a_mkweb.pc");
+        // The KAREL program of the matching controller type is shipped inside the executable.
+        std::wstring local = DataRes::KarelProgram(controllerType);
+        if (local.empty())
+            throw AppError(L"Embedded KAREL program is not available for this controller type.\r\nCache folder: '" +
+                           DataRes::CacheRoot() + L"'");
         if (!FileExists(local))
             throw AppError(L"Local file not found.\r\nFile name: '" + local + L"'");
 

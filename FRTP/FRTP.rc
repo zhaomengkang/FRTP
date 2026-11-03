@@ -78,24 +78,24 @@ IDR_MAINFRAME           ICON                    "res\\FRTP.ico"
 // Dialog
 //
 
-IDD_FRTP_DIALOG DIALOGEX 0, 0, 580, 550
+IDD_FRTP_DIALOG DIALOGEX 0, 0, 584, 550
 STYLE DS_SETFONT | DS_FIXEDSYS | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_APPWINDOW
 CAPTION "FRTP V26.10.22"
 FONT 8, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
     CONTROL         "Connect",IDC_BT_CONNECT,"Button",BS_OWNERDRAW | WS_TABSTOP,1,6,66,14
-    EDITTEXT        IDC_TB_ROBOTIP,69,6,75,12,ES_CENTER | ES_AUTOHSCROLL
-    LTEXT           "USER:",IDC_LB_NAME,147,9,23,9
-    EDITTEXT        IDC_TB_NAME,172,6,58,12,ES_CENTER | ES_AUTOHSCROLL
-    LTEXT           "PWD:",IDC_LB_PASSWORD,232,9,20,9
-    EDITTEXT        IDC_TB_PASSWORD,252,6,62,12,ES_CENTER | ES_AUTOHSCROLL
-    CONTROL         "ExitUI",IDC_CB_BFSELECT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,319,8,42,10
+    EDITTEXT        IDC_TB_ROBOTIP,70,6,117,12,ES_CENTER | ES_AUTOHSCROLL
+    LTEXT           "USER:",IDC_LB_NAME,191,9,33,9
+    EDITTEXT        IDC_TB_NAME,227,6,110,12,ES_CENTER | ES_AUTOHSCROLL
+    LTEXT           "PWD:",IDC_LB_PASSWORD,340,9,29,9
+    EDITTEXT        IDC_TB_PASSWORD,373,6,117,12,ES_CENTER | ES_AUTOHSCROLL
+    CONTROL         "ExitUI",IDC_CB_BFSELECT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,493,8,52,10
     CONTROL         "",IDC_AREA_ROBOTCFG,"Static",SS_BLACKFRAME | NOT WS_VISIBLE,68,7,295,13
-    LTEXT           "HostName:",IDC_LB_HOSTNAME,366,9,133,12
-    PUSHBUTTON      "?",IDC_BT_HELP,566,17,12,14
-    CONTROL         "KB",IDC_BT_TBKEYSHOW,"Button",BS_OWNERDRAW | WS_TABSTOP,566,31,12,14
-    CONTROL         "Pin",IDC_BT_TOPMOST,"Button",BS_OWNERDRAW | WS_TABSTOP,566,46,12,14
+    LTEXT           "HostName:",IDC_LB_HOSTNAME,70,9,400,12
+    PUSHBUTTON      "?",IDC_BT_HELP,559,24,20,18
+    CONTROL         "KB",IDC_BT_TBKEYSHOW,"Button",BS_OWNERDRAW | WS_TABSTOP,559,45,20,18
+    CONTROL         "Pin",IDC_BT_TOPMOST,"Button",BS_OWNERDRAW | WS_TABSTOP,559,66,20,18
     CONTROL         "",IDC_PN_CGTP,"Static",SS_BLACKFRAME,10,24,544,304
     CONTROL         "",IDC_EXPLORER_CGTP,"Static",SS_BLACKFRAME | NOT WS_VISIBLE,13,26,535,297
     CONTROL         "",IDC_WEBVIEW_CGTP,"Static",SS_BLACKFRAME | NOT WS_VISIBLE,13,26,536,297
@@ -239,6 +239,24 @@ IDB_TPENON              BITMAP                  "res\\tpenon.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// Data files embedded in the executable (unpacked at start-up by DataRes)
+//
+
+IDR_DATA_HELP           RCDATA                  "res\\Helper\\help.html"
+
+IDR_DATA_WEBVIEW2LOADER RCDATA                  "res\\WebView2Loader.dll"
+
+IDR_DATA_KAREL_7DA      RCDATA                  "..\\KarelProject\\release\\7DA\\a_mkweb.pc"
+
+IDR_DATA_KAREL_7DC      RCDATA                  "..\\KarelProject\\release\\7DC\\a_mkweb.pc"
+
+IDR_DATA_KAREL_7DF      RCDATA                  "..\\KarelProject\\release\\7DF\\a_mkweb.pc"
+
+IDR_DATA_KAREL_7DH      RCDATA                  "..\\KarelProject\\release\\7DH\\a_mkweb.pc"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // DESIGNINFO
 //
 
@@ -247,7 +265,7 @@ GUIDELINES DESIGNINFO
 BEGIN
     IDD_FRTP_DIALOG, DIALOG
     BEGIN
-        RIGHTMARGIN, 578
+        RIGHTMARGIN, 582
     END
 
     IDD_HELP_DIALOG, DIALOG

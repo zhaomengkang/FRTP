@@ -104,6 +104,47 @@ bool WriteTextFile(const std::wstring& path, const std::wstring& text)
     return ok != FALSE;
 }
 
+int SystemDpi()
+{
+    HDC screen = ::GetDC(nullptr);
+    const int dpi = screen ? ::GetDeviceCaps(screen, LOGPIXELSX) : 0;
+    if (screen) ::ReleaseDC(nullptr, screen);
+    return dpi > 0 ? dpi : 96;
+}
+
+double DevicePixelZoom(double baseZoom, int dpi)
+{
+    if (dpi <= 0) dpi = 96;
+    return baseZoom * 96.0 / static_cast<double>(dpi);
+}
+
+namespace
+{
+    bool EnsureDirectoryTree(const std::wstring& dir)
+    {
+        if (dir.empty()) return false;
+        if (::CreateDirectoryW(dir.c_str(), nullptr)) return true;
+        if (::GetLastError() == ERROR_ALREADY_EXISTS) return true;
+        const size_t slash = dir.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) return false;
+        return EnsureDirectoryTree(dir.substr(0, slash)) && ::CreateDirectoryW(dir.c_str(), nullptr);
+    }
+}
+
+std::wstring SettingsDir()
+{
+    PWSTR raw = nullptr;
+    std::wstring dir;
+    if (SUCCEEDED(::SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &raw)) && raw)
+    {
+        dir = PathCombine2(raw, L"FRTP");
+    }
+    if (raw) ::CoTaskMemFree(raw);
+    if (!dir.empty() && EnsureDirectoryTree(dir))
+        return dir;
+    return ExeDir();
+}
+
 static bool ResolveV4(const std::wstring& host, sockaddr_in& out)
 {
     ADDRINFOW hints = {};

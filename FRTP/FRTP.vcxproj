@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -89,6 +89,7 @@
   <ItemGroup>
     <ClCompile Include="BrowserSite.cpp" />
     <ClCompile Include="ColorButton.cpp" />
+    <ClCompile Include="DataRes.cpp" />
     <ClCompile Include="FRLoadUserPC.cpp" />
     <ClCompile Include="FRTP.cpp" />
     <ClCompile Include="FRTPDlg.cpp" />
@@ -106,6 +107,7 @@
   <ItemGroup>
     <ClInclude Include="BrowserSite.h" />
     <ClInclude Include="ColorButton.h" />
+    <ClInclude Include="DataRes.h" />
     <ClInclude Include="FRLoadUserPC.h" />
     <ClInclude Include="FRTP.h" />
     <ClInclude Include="FRTPDlg.h" />
@@ -125,6 +127,7 @@
     <None Include="KeyTable.inc" />
     <None Include="res\FRTP.rc2" />
     <None Include="res\Helper\help.html" />
+    <None Include="res\WebView2Loader.dll" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="FRTP.rc" />
@@ -136,9 +139,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" GeneratePathProperty="true" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ItemGroup>
-    <RuntimeFiles Include="$(MSBuildProjectDirectory)\..\KarelProject\release\**\*.*" />
-  </ItemGroup>
   <ItemGroup>
     <Image Include="res\FRTP.ico" />
     <Image Include="res\tpbseg.bmp" />
@@ -169,8 +169,16 @@
     <Image Include="res\tpuparrow.bmp" />
     <Image Include="res\tpzero.bmp" />
   </ItemGroup>
-  <Target Name="CopyRuntimeFiles" AfterTargets="Build">
-    <Copy SourceFiles="@(RuntimeFiles)" DestinationFiles="@(RuntimeFiles->'$(OutDir)KAREL\%(RecursiveDir)%(Filename)%(Extension)')" Condition="Exists('$(MSBuildProjectDirectory)\..\KarelProject\release')" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\res\Helper\help.html" DestinationFolder="$(OutDir)res\Helper\" />
+  <!-- The KAREL programs, the help page and the WebView2 loader live inside FRTP.exe, so a
+       release output only needs the EXE. Debug keeps everything else the toolchain drops in
+       the output folder. Set ReleaseOutputKeepPdb=true to keep FRTP.pdb for crash analysis. -->
+  <Target Name="TrimReleaseOutputToExe" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <_ReleaseLeftover Include="$(OutDir)**\*" />
+      <_ReleaseLeftover Remove="$(OutDir)FRTP.exe" />
+      <_ReleaseLeftover Remove="$(OutDir)FRTP.pdb" Condition="'$(ReleaseOutputKeepPdb)' == 'true'" />
+    </ItemGroup>
+    <Delete Files="@(_ReleaseLeftover)" ContinueOnError="true" />
+    <RemoveDir Directories="$(OutDir)runtimes;$(OutDir)KAREL;$(OutDir)res;$(OutDir)Helper" ContinueOnError="true" />
   </Target>
 </Project>

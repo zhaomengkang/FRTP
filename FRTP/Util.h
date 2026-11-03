@@ -25,6 +25,19 @@ bool FileExists(const std::wstring& path);
 std::wstring ReadTextFile(const std::wstring& path);
 bool WriteTextFile(const std::wstring& path, const std::wstring& text);
 
+// Display scaling helpers.
+// SystemDpi() returns the system DPI (96 = 100 % display scale).
+int SystemDpi();
+
+// Writable per-user folder for settings (%LOCALAPPDATA%\FRTP). Falls back to the
+// executable folder when the profile folder cannot be created.
+std::wstring SettingsDir();
+
+// Zoom factor for a browser control that must keep its content at the 100 % display
+// scale: baseZoom is the zoom used on an unscaled display, the result cancels the
+// monitor scaling.
+double DevicePixelZoom(double baseZoom, int dpi);
+
 // Result of IcmpSendEcho style ping.
 enum class PingResult { Ok, Failed, InvalidAddress };
 PingResult PingHost(const std::wstring& host, DWORD timeoutMs);

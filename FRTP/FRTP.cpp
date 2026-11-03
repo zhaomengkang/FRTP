@@ -1,8 +1,9 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "FRTP.h"
 #include "FRTPDlg.h"
 #include "HelpDlg.h"
 #include "Util.h"
+#include "DataRes.h"
 #include <atlhost.h>
 
 #pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"")
@@ -263,6 +264,15 @@ BOOL CFRTPApp::InitInstance()
 
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
+
+    // The KAREL programs, the help page and the WebView2 loader are compiled into the
+    // executable; unpack them once before anything tries to use them.
+    std::wstring dataError;
+    if (!DataRes::Prepare(&dataError))
+    {
+        const std::wstring message = L"Unable to unpack the embedded data files.\r\n" + dataError;
+        MessageBoxW(nullptr, message.c_str(), L"FRTP", MB_OK | MB_ICONWARNING);
+    }
 
     if (!EnsureOcx()) return FALSE;
 
