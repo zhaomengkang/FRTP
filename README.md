@@ -14,11 +14,11 @@ Version V2026.10.22 · Author: Zhao Mengkang
 ## Software Update
 ### Download Links
 **GitHub Releases**
-URL: https://github.com/zhaomengkang/FRTeachPendant/releases
+URL: https://github.com/zhaomengkang/FRTP/releases
 
 ## Open Source Project Address
-**zhaomengkang/FRTeachPendant: Fanuc Robot Remote TeachPendant**
-URL: https://github.com/zhaomengkang/FRTeachPendant
+**zhaomengkang/FRTP: Fanuc Robot Remote TeachPendant**
+URL: https://github.com/zhaomengkang/FRTP
 
 ## Changelog
 ### 2026.10.22
