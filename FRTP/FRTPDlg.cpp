@@ -355,7 +355,7 @@ BOOL CFRTPDlg::OnInitDialog()
     m_btKeyShow.SetBackColor(kGreen);
     if (m_autoConnectOnStartup)
     {
-        m_btConnect.ShowWindow(SW_HIDE);
+        // The button stays visible: it turns into "Disconnect" as soon as the connection is up.
         PostMessage(WM_COMMAND, MAKEWPARAM(IDC_BT_CONNECT, BN_CLICKED),
                     reinterpret_cast<LPARAM>(m_btConnect.GetSafeHwnd()));
     }
@@ -772,6 +772,17 @@ void CFRTPDlg::SetRobotCfgVisible(bool visible)
     GetDlgItem(IDC_LB_HOSTNAME)->ShowWindow(visible ? SW_HIDE : SW_SHOW);
 }
 
+// Win32 group boxes do not pass "disabled" on to their children, so the connection fields are
+// toggled one by one: while a connection is in progress or established they are read only.
+void CFRTPDlg::SetRobotCfgEnabled(bool enable)
+{
+    for (UINT id : { IDC_TB_ROBOTIP, IDC_TB_NAME, IDC_TB_PASSWORD, IDC_CB_BFSELECT })
+    {
+        if (CWnd* control = GetDlgItem(id))
+            control->EnableWindow(enable ? TRUE : FALSE);
+    }
+}
+
 void CFRTPDlg::OnBnClickedKeyShow()
 {
     SetKeyboardVisible(!m_kbVisible);
@@ -876,7 +887,7 @@ void CFRTPDlg::InitAll()
     }
     ShowBrowser(true);
     SetRobotCfgVisible(true);
-    GetDlgItem(IDC_TB_ROBOTIP)->EnableWindow(TRUE);
+    SetRobotCfgEnabled(true);
     GetDlgItem(IDC_BT_CONNECT)->EnableWindow(TRUE);
     m_pb.ShowWindow(SW_HIDE);
     SetBusy(false);
@@ -916,7 +927,7 @@ void CFRTPDlg::OnBnClickedConnect()
     }
     m_btConnect.SetWindowText(L"Connecting");
     m_btConnect.EnableWindow(FALSE);
-    GetDlgItem(IDC_TB_ROBOTIP)->EnableWindow(FALSE);
+    SetRobotCfgEnabled(false);   // IP, user name, password and Exit UI are read only while busy
 
     CString title; GetWindowText(title);
     int session = ++m_session;

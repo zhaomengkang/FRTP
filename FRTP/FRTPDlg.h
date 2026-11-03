@@ -105,6 +105,7 @@ private:
     void SetPanelEnabled(bool enable);
     void SetKeyboardVisible(bool visible);
     void SetRobotCfgVisible(bool visible);
+    void SetRobotCfgEnabled(bool enable);
     void CollectKeyboardControls();
     void SetTopMost(bool on);
     void DisableTopMostForDialog();
